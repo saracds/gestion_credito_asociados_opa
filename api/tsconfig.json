@@ -1,0 +1,38 @@
+{
+  // Configuración base: usada por el editor, el chequeo de tipos y las pruebas.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    // Node.js nativo con módulos ES: los imports relativos llevan extensión .js
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+
+    // Rigor máximo del compilador: errores en compilación y no en producción.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    "esModuleInterop": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "rootDir": ".",
+    "outDir": "dist",
+    "sourceMap": true
+  },
+  "include": [
+    "src",
+    "tests",
+    "tests-integration",
+    "vitest.config.ts",
+    "vitest.integration.config.ts"
+  ]
+}

@@ -1,0 +1,9 @@
+# Normaliza finales de línea en el repositorio.
+* text=auto
+
+# Los scripts de shell se ejecutan dentro de contenedores Linux: si Git en
+# Windows los convierte a CRLF, bash falla con "$'\r': command not found".
+*.sh text eol=lf
+
+# Scripts SQL con LF para que se comporten igual en cualquier sistema operativo.
+*.sql text eol=lf

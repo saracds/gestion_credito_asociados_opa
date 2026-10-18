@@ -1,0 +1,202 @@
+# =============================================================================
+# docker-compose.yml — Módulo de créditos OPA
+# -----------------------------------------------------------------------------
+# Todo el entorno se construye desde los Dockerfile del repositorio con
+# versiones fijas. No se requiere ninguna instalación local salvo Docker.
+#
+# Servicios:
+#   db                     SQL Server 2022 (database/Dockerfile, etapa sqlserver)
+#   db-init                Aplica los scripts SQL y termina (etapa migraciones)
+#   api                    API REST (api/Dockerfile, etapa production)
+#   webhook-worker         Envía los webhooks pendientes (misma imagen de la API)
+#   webhook-receptor       Simula el sistema externo que recibe el webhook
+#   web                    Frontend React servido por Nginx (proxy de /api a la API)
+#   api-integration-tests  Pruebas contra la BD real (perfil "test", bajo demanda)
+#
+# Pruebas:
+#   docker compose --profile test run --rm api-integration-tests
+#   docker compose run --rm --entrypoint /database/ejecutar-pruebas.sh db-init
+#
+# Modo desarrollo: ver docker-compose.dev.yml
+# =============================================================================
+name: creditos-opa
+
+# Conexión a la base de datos, compartida por la API, el worker y las pruebas.
+x-db-environment: &db-environment
+  DB_HOST: db
+  DB_PORT: 1433
+  DB_NAME: CreditosOPA
+  DB_ENCRYPT: "true"
+  # El SQL Server del contenedor usa un certificado autofirmado (solo desarrollo).
+  DB_TRUST_SERVER_CERTIFICATE: "true"
+
+# Configuración propia de la API.
+x-api-environment: &api-environment
+  <<: *db-environment
+  DB_USER: app_creditos_api
+  DB_PASSWORD: ${DB_API_PASSWORD:?Defina DB_API_PASSWORD en el archivo .env}
+  JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET en el archivo .env (mínimo 32 caracteres)}
+  JWT_EXPIRES_IN_MINUTES: ${JWT_EXPIRES_IN_MINUTES:-60}
+  # Por defecto apunta al receptor de prueba; en producción sería la URL real del sistema externo.
+  WEBHOOK_URL: ${WEBHOOK_URL:-http://webhook-receptor:4000/webhooks/creditos}
+
+services:
+  db:
+    build:
+      context: ./database
+      target: sqlserver
+    image: creditos-opa-db:2022-CU26-GDR1
+    pull_policy: build
+    container_name: creditos-opa-db
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Defina MSSQL_SA_PASSWORD en el archivo .env}
+    ports:
+      # Puerto externo 14330 para conectarse con SSMS / Azure Data Studio sin
+      # chocar con otra instancia de SQL Server que pudiera existir en el equipo.
+      - "${DB_PORT:-14330}:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+
+  db-init:
+    build:
+      context: ./database
+      target: migraciones
+    image: creditos-opa-db-migraciones:1.0.0
+    pull_policy: build
+    container_name: creditos-opa-db-init
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      # Claves con las que db-init crea (o actualiza) los logins de la aplicación.
+      DB_API_PASSWORD: ${DB_API_PASSWORD:?Defina DB_API_PASSWORD en el archivo .env}
+      DB_WORKER_PASSWORD: ${DB_WORKER_PASSWORD:?Defina DB_WORKER_PASSWORD en el archivo .env}
+      SEED_DEMO: ${SEED_DEMO:-true}
+    restart: "no"
+
+  api:
+    build:
+      context: ./api
+      target: production
+    image: creditos-opa-api:1.0.0
+    pull_policy: build
+    container_name: creditos-opa-api
+    init: true
+    depends_on:
+      db:
+        condition: service_healthy
+      # La API arranca solo cuando los scripts SQL terminaron correctamente.
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *api-environment
+      NODE_ENV: production
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      # Swagger UI en http://localhost:3000/api/docs
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-true}
+      # El puerto 3000 se publica solo para Swagger y pruebas de la evaluación;
+      # en producción la API no debe quedar expuesta fuera de la red interna.
+      TRUST_PROXY_HOPS: 1
+    ports:
+      - "${API_PORT:-3000}:3000"
+    restart: unless-stopped
+
+  webhook-worker:
+    # Misma imagen que la API
+    build:
+      context: ./api
+      target: production
+    image: creditos-opa-api:1.0.0
+    pull_policy: build
+    container_name: creditos-opa-webhook-worker
+    init: true
+    command: ["node", "dist/worker.js"]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *db-environment
+      # Login propio: solo puede leer y actualizar el outbox y registrar intentos.
+      DB_USER: app_creditos_worker
+      DB_PASSWORD: ${DB_WORKER_PASSWORD:?Defina DB_WORKER_PASSWORD en el archivo .env}
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:?Defina WEBHOOK_SECRET en el archivo .env (mínimo 32 caracteres)}
+      WEBHOOK_POLL_INTERVAL_MS: ${WEBHOOK_POLL_INTERVAL_MS:-2000}
+      WEBHOOK_REQUEST_TIMEOUT_MS: ${WEBHOOK_REQUEST_TIMEOUT_MS:-10000}
+      WEBHOOK_RETRY_BASE_SECONDS: ${WEBHOOK_RETRY_BASE_SECONDS:-10}
+      WEBHOOK_RETRY_MAX_SECONDS: ${WEBHOOK_RETRY_MAX_SECONDS:-3600}
+    # El worker no expone HTTP: su healthcheck verifica que el "latido" que
+    # escribe en cada ciclo tenga menos de 60 segundos (el ciclo no está colgado).
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const f=process.env.WORKER_HEARTBEAT_FILE||'/tmp/webhook-worker.heartbeat';try{process.exit(Date.now()-Number(require('fs').readFileSync(f,'utf8'))<60000?0:1)}catch{process.exit(1)}",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+  webhook-receptor:
+    build:
+      context: ./webhook-receptor
+    image: creditos-opa-webhook-receptor:1.0.0
+    pull_policy: build
+    container_name: creditos-opa-webhook-receptor
+    init: true
+    environment:
+      # Debe ser el MISMO secreto del worker: es el secreto compartido de la firma HMAC.
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      RECEPTOR_MODO: ${RECEPTOR_MODO:-normal}
+      RECEPTOR_FALLOS_POR_EVENTO: ${RECEPTOR_FALLOS_POR_EVENTO:-2}
+    ports:
+      - "${RECEPTOR_PORT:-4000}:4000"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+    image: creditos-opa-web:1.0.0
+    pull_policy: build
+    container_name: creditos-opa-web
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  api-integration-tests:
+    # Solo se ejecuta bajo demanda: docker compose --profile test run --rm api-integration-tests
+    profiles: ["test"]
+    build:
+      context: ./api
+      target: development
+    image: creditos-opa-api:dev
+    pull_policy: build
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *api-environment
+      NODE_ENV: test
+      LOG_LEVEL: silent
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      # Las pruebas del webhook ejecutan el worker con su login, para comprobar
+      # que los permisos mínimos alcanzan para todo el flujo.
+      WORKER_DB_USER: app_creditos_worker
+      WORKER_DB_PASSWORD: ${DB_WORKER_PASSWORD:?Defina DB_WORKER_PASSWORD en el archivo .env}
+    command: ["npm", "run", "test:integration"]
+    restart: "no"
+
+volumes:
+  sqlserver-data:

@@ -1,0 +1,38 @@
+# =============================================================================
+# docker-compose.dev.yml — Ajustes para DESARROLLO
+# -----------------------------------------------------------------------------
+#
+# Diferencias con el modo producción:
+#   - La API y el worker usan la etapa "development" del Dockerfile).
+#   - El código fuente se monta como volumen: al guardar un archivo en api/src,
+#     nodemon reinicia el proceso automáticamente dentro del contenedor.
+#   - Logs legibles con colores y nivel debug.
+#
+# =============================================================================
+x-dev-volumes: &dev-volumes
+  # Solo se montan las carpetas editables
+  - ./api/src:/app/src
+  - ./api/tests:/app/tests
+  - ./api/tests-integration:/app/tests-integration
+
+services:
+  api:
+    build:
+      target: development
+    image: creditos-opa-api:dev
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+    volumes: *dev-volumes
+    restart: "no"
+
+  webhook-worker:
+    build:
+      target: development
+    image: creditos-opa-api:dev
+    command: ["npx", "nodemon", "--legacy-watch", "--watch", "src", "--ext", "ts", "--exec", "tsx src/worker.ts"]
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+    volumes: *dev-volumes
+    restart: "no"

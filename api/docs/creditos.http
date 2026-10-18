@@ -1,0 +1,130 @@
+# =============================================================================
+# Peticiones de prueba manual — API de créditos
+# -----------------------------------------------------------------------------
+# Uso: extensión "REST Client" de VS Code (humao.rest-client). Clic en
+# "Send Request" sobre cada petición. Ejecutar primero el login: el token y
+# la versión del crédito se reutilizan automáticamente en las siguientes.
+# =============================================================================
+
+@baseUrl = http://localhost:3000
+@token = {{login.response.body.data.accessToken}}
+@creditoId = {{crear.response.body.data.id}}
+@version = {{crear.response.headers.ETag}}
+
+### Health check (disponibilidad)
+GET {{baseUrl}}/health/ready
+
+### 1. Login como analista
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "analista@opa.local", "password": "Analista123*" }
+
+### 2. Catálogos (tipos de crédito con su política y formas de pago)
+GET {{baseUrl}}/api/catalogos
+Authorization: Bearer {{token}}
+
+### 3. Crear crédito (ejemplo del enunciado; cambie la identificación si ya existe)
+# @name crear
+POST {{baseUrl}}/api/creditos
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "identificacionAsociado": "1012345678",
+  "nombreAsociado": "Laura Restrepo",
+  "tipoCredito": "LIBRE_INVERSION",
+  "valorSolicitado": 15000000,
+  "tasaInteres": 1.5,
+  "numeroCuotas": 36,
+  "formaPago": "NOMINA"
+}
+
+### 4. Consultar el crédito creado (observe la cabecera ETag)
+GET {{baseUrl}}/api/creditos/{{creditoId}}
+Authorization: Bearer {{token}}
+
+### 5. Actualizar con la versión vigente -> 200
+PATCH {{baseUrl}}/api/creditos/{{creditoId}}
+Authorization: Bearer {{token}}
+If-Match: {{version}}
+Content-Type: application/json
+
+{ "valorSolicitado": 12000000, "observacion": "Ajuste por capacidad de pago" }
+
+### 6. Repetir la petición 5 (versión ya vencida) -> 412 PRECONDITION_FAILED
+PATCH {{baseUrl}}/api/creditos/{{creditoId}}
+Authorization: Bearer {{token}}
+If-Match: {{version}}
+Content-Type: application/json
+
+{ "numeroCuotas": 24 }
+
+### 7. Transición inválida SOLICITADO -> APROBADO -> 422
+PATCH {{baseUrl}}/api/creditos/{{creditoId}}/estado
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "estado": "APROBADO" }
+
+### 8. Transición válida SOLICITADO -> EN_ESTUDIO -> 200
+PATCH {{baseUrl}}/api/creditos/{{creditoId}}/estado
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "estado": "EN_ESTUDIO", "observacion": "Se inicia el estudio" }
+
+### 9. Historial del crédito
+GET {{baseUrl}}/api/creditos/{{creditoId}}/historial
+Authorization: Bearer {{token}}
+
+### 10. Listado con filtros, búsqueda y paginación
+GET {{baseUrl}}/api/creditos?page=1&pageSize=5&estado=EN_ESTUDIO&ordenarPor=valorSolicitado&direccion=desc
+Authorization: Bearer {{token}}
+
+### 11. Búsqueda por nombre sin tildes
+GET {{baseUrl}}/api/creditos?busqueda=perez
+Authorization: Bearer {{token}}
+
+### 12. Resumen para el dashboard
+GET {{baseUrl}}/api/creditos/resumen
+Authorization: Bearer {{token}}
+
+### 13. Crédito inexistente -> 404 CREDITO_NOT_FOUND
+GET {{baseUrl}}/api/creditos/999999
+Authorization: Bearer {{token}}
+
+### 14. Identificación existente con otro nombre -> 409 ASOCIADO_NOMBRE_NO_COINCIDE
+POST {{baseUrl}}/api/creditos
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "identificacionAsociado": "1001234567",
+  "nombreAsociado": "Otra Persona",
+  "tipoCredito": "VEHICULO",
+  "valorSolicitado": 30000000,
+  "tasaInteres": 1.4,
+  "numeroCuotas": 48,
+  "formaPago": "NOMINA"
+}
+
+### 15. Traza del webhook del crédito creado (estado y cada intento)
+GET {{baseUrl}}/api/creditos/{{creditoId}}/notificaciones
+Authorization: Bearer {{token}}
+
+### 16. Receptor de prueba: eventos recibidos (firma válida, duplicados)
+GET http://localhost:4000/eventos
+
+### 17. Receptor de prueba: simular falla temporal (503 en los 2 primeros intentos)
+PUT http://localhost:4000/modo
+Content-Type: application/json
+
+{ "modo": "falla-temporal" }
+
+### 18. Receptor de prueba: volver al modo normal
+PUT http://localhost:4000/modo
+Content-Type: application/json
+
+{ "modo": "normal" }

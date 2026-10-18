@@ -1,0 +1,9 @@
+# Lo que nunca debe entrar al contexto de construcción de la imagen.
+node_modules
+dist
+coverage
+.env
+.env.*
+*.log
+Dockerfile
+.dockerignore

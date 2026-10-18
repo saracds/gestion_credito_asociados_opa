@@ -1,0 +1,9 @@
+{
+  // Compilación para producción: solo el código fuente, sin pruebas.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"]
+}

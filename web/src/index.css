@@ -1,0 +1,120 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@fontsource-variable/atkinson-hyperlegible-next';
+
+/*
+ * =============================================================================
+ * Sistema visual 
+ * -----------------------------------------------------------------------------
+ * Tipografía: Atkinson Hyperlegible Next, diseñada para máxima legibilidad.
+ * Los analistas leen cédulas y montos todo el día: distingue 0/O, 1/l/I y
+ * se usan cifras tabulares para que los montos se alineen en columnas.
+ * =============================================================================
+ */
+
+:root {
+  --radius: 0.5rem;
+
+  /* Base */
+  --background: #f4f6f5; /* papel */
+  --foreground: #173a33; /* tinta pino */
+  --card: #ffffff;
+  --card-foreground: #173a33;
+  --popover: #ffffff;
+  --popover-foreground: #173a33;
+  --muted: #e8edeb;
+  --muted-foreground: #4f645d;
+  --border: #d5ddda;
+  --input: #c3cec9;
+  --ring: #1f6f5c;
+
+  /* Acciones */
+  --primary: #1f6f5c; /* verde cooperativo */
+  --primary-foreground: #ffffff;
+  --secondary: #e3ebe8;
+  --secondary-foreground: #173a33;
+  --accent: #dce8e3;
+  --accent-foreground: #173a33;
+  --destructive: #b03030;
+  --destructive-foreground: #ffffff;
+
+  /* Navegación (tapa de la libreta) */
+  --sidebar: #173a33;
+  --sidebar-foreground: #dbe7e2;
+  --sidebar-active: #24524a;
+
+  /* Sellos de estado del crédito */
+  --estado-solicitado: #34558a;
+  --estado-en-estudio: #8a5a0b;
+  --estado-aprobado: #2b7a4b;
+  --estado-desembolsado: #12596e;
+  --estado-rechazado: #b03030;
+  --estado-cancelado: #5f6670;
+}
+
+@theme inline {
+  --font-sans: 'Atkinson Hyperlegible Next Variable', system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-active: var(--sidebar-active);
+
+  --color-estado-solicitado: var(--estado-solicitado);
+  --color-estado-en-estudio: var(--estado-en-estudio);
+  --color-estado-aprobado: var(--estado-aprobado);
+  --color-estado-desembolsado: var(--estado-desembolsado);
+  --color-estado-rechazado: var(--estado-rechazado);
+  --color-estado-cancelado: var(--estado-cancelado);
+
+  --radius-sm: calc(var(--radius) - 3px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-size: 16px;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: 'tnum' 1; /* cifras tabulares: montos alineados */
+    line-height: 1.5;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
